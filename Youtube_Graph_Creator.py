@@ -6,6 +6,7 @@
 
 import os
 import csv
+import copy
 import googleapiclient.discovery
 
 class YoutubeGraphCreator(object):
@@ -22,41 +23,82 @@ class YoutubeGraphCreator(object):
         with open(seed_file, newline='') as csvfile:
             spamreader = csv.reader(csvfile, delimiter=',', quotechar='|')
             for row in spamreader:
-                self.nodes[row[0]] = {
+                seed = row[0]
+                self.nodes[seed] = {
                     'seed group': None,
                     'topics': None,
                     'subscribers': None,
                     'channel age': None, 
                     'video count': None,
-                    'view count': None
+                    'view count': None,
+                    'id': None,
+                    'title': seed,
+                    'depth': 0
                 }
 
-    
+    def explore_seed_graph(self):
+        visited = set()
+        for node in self.nodes:
+            depth = self._get_node_depth(node)
+            if node not in visited:
+                visited.add(node)
+                while depth < 3:
+                    depth = explore_from_node(node)
+            else:
+                continue
 
-def query_youtube_channel(identifier, username=False):
+    def _parse_node_data(self, node_data):
+        parsed_data = {}
+        parsed_data['id'] = node_data['items']['id']
+        parsed_data['title'] = node_data['items']['snippet']['title']
+        parsed_data['channel age'] = node_data['items']['snippet']['publishedAt']
+        parsed_data['subscribers'] = node_data['items']['statistics']['subscriberCount'] 
+        parsed_data['video count'] = node_data['items']['statistics']['videoCount'] 
+        parsed_data['view count'] = node_data['items']['statistics']['viewCount']
+        parsed_data['topics'] = node_data['items']['topicDetails']['topicCategories'] 
 
-    # Disable OAuthlib's HTTPS verification when running locally.
-    # *DO NOT* leave this option enabled in production.
-    os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+    def _get_node_depth(self, node):
+        return self.nodes[node].depth
 
-    api_service_name = "youtube"
-    api_version = "v3"
-    DEVELOPER_KEY = "AIzaSyCX_mf5QX25BSSv7HRsPKYrI3dvboid60E"
+    def _get_parent_seed_group(self, node):
+        return self.nodes[node]['seed group']
 
-    youtube = googleapiclient.discovery.build(
-        api_service_name, api_version, developerKey = DEVELOPER_KEY)
+    def explore_from_node(self, node, username=False):
+        depth = self._get_node_depth(node)
+        if  depth == 0:
+            username=True
+        node_data = self._query_youtube_channel(node, username)
+        parsed_node_data = self._parse_node_data(node_data)
+        self.nodes[node] = {**self.nodes[node], **parsed_node_data}
+        neighbors = node_data['items'][0]['brandingSettings']['channel']['featuredChannelsUrls'])
+        neighbor_depth = (depth + 1)
+        for neighbor in neighbors:
+            self.nodes[neighbor] = {'depth': neighbor_depth}
 
-    #id="UC_x5XG1OV2P6uZZ5FSM9Ttw",
-    #forUsername="tibees",
-    if username:
-        request = youtube.channels().list(
-            forUsername=identifier,
-            part="brandingSettings,contentOwnerDetails,snippet,contentDetails,statistics,topicDetails,status"
-        )
-    else:
-        request = youtube.channels().list(
-            id=identifier,
-            part="brandingSettings,contentOwnerDetails,snippet,contentDetails,statistics,topicDetails,status"
-        )
-    response = request.execute()
-    return response
+    def _query_youtube_channel(self, identifier, username=False):
+
+        # Disable OAuthlib's HTTPS verification when running locally.
+        # *DO NOT* leave this option enabled in production.
+        os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+
+        api_service_name = "youtube"
+        api_version = "v3"
+        DEVELOPER_KEY = "AIzaSyCX_mf5QX25BSSv7HRsPKYrI3dvboid60E"
+
+        youtube = googleapiclient.discovery.build(
+            api_service_name, api_version, developerKey = DEVELOPER_KEY)
+
+        #id="UC_x5XG1OV2P6uZZ5FSM9Ttw",
+        #forUsername="tibees",
+        if username:
+            request = youtube.channels().list(
+                forUsername=identifier,
+                part="brandingSettings,contentOwnerDetails,snippet,contentDetails,statistics,topicDetails,status"
+            )
+        else:
+            request = youtube.channels().list(
+                id=identifier,
+                part="brandingSettings,contentOwnerDetails,snippet,contentDetails,statistics,topicDetails,status"
+            )
+        response = request.execute()
+        return response
