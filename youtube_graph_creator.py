@@ -8,6 +8,7 @@ import os
 import csv
 import copy
 import googleapiclient.discovery
+from tools.logger import logger
 
 class YoutubeGraphCreator(object):
 
@@ -35,6 +36,7 @@ class YoutubeGraphCreator(object):
                     'title': seed,
                     'depth': 0
                 }
+        logger.debug("%s; %s", ['Youtube_Graph_Creator', 'load_seed_graph'], f"Number of seed nodes: {len(self.nodes.keys())}")
 
     def explore_seed_graph(self):
         visited = set()
@@ -63,6 +65,9 @@ class YoutubeGraphCreator(object):
     def _get_parent_seed_group(self, node):
         return self.nodes[node]['seed group']
 
+    def _get_node_graph_size(self):
+        return len(self.nodes.keys())
+
     def explore_from_node(self, node, username=False):
         depth = self._get_node_depth(node)
         if  depth == 0:
@@ -70,10 +75,11 @@ class YoutubeGraphCreator(object):
         node_data = self._query_youtube_channel(node, username)
         parsed_node_data = self._parse_node_data(node_data)
         self.nodes[node] = {**self.nodes[node], **parsed_node_data}
-        neighbors = node_data['items'][0]['brandingSettings']['channel']['featuredChannelsUrls'])
+        neighbors = node_data['items'][0]['brandingSettings']['channel']['featuredChannelsUrls']
         neighbor_depth = (depth + 1)
         for neighbor in neighbors:
-            self.nodes[neighbor] = {'depth': neighbor_depth}
+            self.nodes[neighbor] = {'depth': neighbor_depth, 'seed group': self._get_parent_seed_group(node)}
+        logger.debug("%s; %s", ['Youtube_Graph_Creator', 'explore_from_node'], self._get_node_graph_size())
 
     def _query_youtube_channel(self, identifier, username=False):
 
