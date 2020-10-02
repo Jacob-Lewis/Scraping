@@ -8,6 +8,7 @@ import os
 import csv
 import copy
 import googleapiclient.discovery
+from collections import defaultdict
 from tools.logger import logger
 
 class YoutubeGraphCreator(object):
@@ -15,7 +16,7 @@ class YoutubeGraphCreator(object):
     def __init__(self, max_depth=3):
         self.max_depth=max_depth
         self.nodes = {}
-        self.edges = {}
+        self.edges = []
 
     def load_seed_graph(self, seed_file):
         """
@@ -40,46 +41,38 @@ class YoutubeGraphCreator(object):
 
     def explore_seed_graph(self):
         visited = set()
-        for node in self.nodes:
-            depth = self._get_node_depth(node)
-            if node not in visited:
-                visited.add(node)
-                while depth < 3:
-                    depth = explore_from_node(node)
-            else:
-                continue
+        try:
+            for node in self.nodes:
+                depth = self._get_node_depth(node)
+                if node not in visited and depth < 3:
+                    visited.add(node)
+                    explore_from_node(node)
+                else:
+                    continue
+        except:
+            self.save_graph()
 
-    def _parse_node_data(self, node_data):
-        parsed_data = {}
-        parsed_data['id'] = node_data['items']['id']
-        parsed_data['title'] = node_data['items']['snippet']['title']
-        parsed_data['channel age'] = node_data['items']['snippet']['publishedAt']
-        parsed_data['subscribers'] = node_data['items']['statistics']['subscriberCount'] 
-        parsed_data['video count'] = node_data['items']['statistics']['videoCount'] 
-        parsed_data['view count'] = node_data['items']['statistics']['viewCount']
-        parsed_data['topics'] = node_data['items']['topicDetails']['topicCategories'] 
+    def save_graph(self):
+        
+        logger.debug("%s; Number of nodes in graph: %s", ['Youtube_Graph_Creator', 'save_graph'], self._get_node_graph_size())
+        logger.debug("%s; Number of edges in graph: %s", ['Youtube_Graph_Creator', 'save_graph'], self._get_node_edge_count())
+        
+        attributes = set()
+        for k,v in self.nodes.items():
+            attributes.update(v.keys())
+        
+        with open('./output/nodes.csv','w',newline='') as f:
+            w = csv.DictWriter(f,fieldnames=['Channel Title']+list(sorted(attributes)))
+            w.writeheader()
+            for k,v in self.nodes.items():
+                temp = dict(v)
+                temp['Channel Title'] = k
+                w.writerow(temp)
 
-    def _get_node_depth(self, node):
-        return self.nodes[node].depth
-
-    def _get_parent_seed_group(self, node):
-        return self.nodes[node]['seed group']
-
-    def _get_node_graph_size(self):
-        return len(self.nodes.keys())
-
-    def explore_from_node(self, node, username=False):
-        depth = self._get_node_depth(node)
-        if  depth == 0:
-            username=True
-        node_data = self._query_youtube_channel(node, username)
-        parsed_node_data = self._parse_node_data(node_data)
-        self.nodes[node] = {**self.nodes[node], **parsed_node_data}
-        neighbors = node_data['items'][0]['brandingSettings']['channel']['featuredChannelsUrls']
-        neighbor_depth = (depth + 1)
-        for neighbor in neighbors:
-            self.nodes[neighbor] = {'depth': neighbor_depth, 'seed group': self._get_parent_seed_group(node)}
-        logger.debug("%s; %s", ['Youtube_Graph_Creator', 'explore_from_node'], self._get_node_graph_size())
+        with open("./output/edges.csv", "wb") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Source", "Target"])
+            writer.writerows(self.edges)
 
     def _query_youtube_channel(self, identifier, username=False):
 
@@ -108,3 +101,42 @@ class YoutubeGraphCreator(object):
             )
         response = request.execute()
         return response
+
+    def _parse_node_data(self, node_data):
+        parsed_data = {}
+        parsed_data['id'] = node_data['items']['id']
+        parsed_data['title'] = node_data['items']['snippet']['title']
+        parsed_data['channel age'] = node_data['items']['snippet']['publishedAt']
+        parsed_data['subscribers'] = node_data['items']['statistics']['subscriberCount'] 
+        parsed_data['video count'] = node_data['items']['statistics']['videoCount'] 
+        parsed_data['view count'] = node_data['items']['statistics']['viewCount']
+        parsed_data['topics'] = node_data['items']['topicDetails']['topicCategories'] 
+
+    def _get_node_depth(self, node):
+        return self.nodes[node].depth
+
+    def _get_parent_seed_group(self, node):
+        return self.nodes[node]['seed group']
+
+    def _get_node_graph_size(self):
+        return len(self.nodes.keys())
+
+    def _get_node_edge_count(self):
+        return len(self.edges)
+
+    def explore_from_node(self, node, username=False):
+        depth = self._get_node_depth(node)
+        if  depth == 0:
+            username=True
+        node_data = self._query_youtube_channel(node, username)
+        parsed_node_data = self._parse_node_data(node_data)
+        self.nodes[node] = {**self.nodes[node], **parsed_node_data}
+        node_id = self.nodes[node]['id']
+        neighbors = node_data['items'][0]['brandingSettings']['channel']['featuredChannelsUrls']
+        neighbor_depth = (depth + 1)
+        for neighbor in neighbors:
+            self.nodes[neighbor] = {'depth': neighbor_depth, 'seed group': self._get_parent_seed_group(node)}
+            self.edges.append([node_id, neighbor])
+        logger.debug("%s; Number of nodes in graph: %s", ['Youtube_Graph_Creator', 'explore_from_node'], self._get_node_graph_size())
+        logger.debug("%s; Number of edges in graph: %s", ['Youtube_Graph_Creator', 'explore_from_node'], self._get_node_edge_count())
+
