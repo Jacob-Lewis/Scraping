@@ -6,3 +6,4 @@ formatter = logging.Formatter('%(asctime)s %(name)-12s %(levelname)-8s %(message
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 logger.setLevel(logging.DEBUG)
+logging.getLogger("googleapiclient").setLevel(logging.ERROR)
