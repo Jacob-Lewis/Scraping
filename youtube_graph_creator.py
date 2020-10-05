@@ -144,7 +144,7 @@ class YoutubeGraphCreator(object):
                 if node_data['subscribers'] > 1000000:
                     node_class = 1
                 else: 
-                    node_data = 2
+                    node_class = 2
         except Exception as e:
             logger.debug("%s; comparison failed with Exception: %s", ['Youtube_Graph_Creator', '_determine_class'], e)
 
